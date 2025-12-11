@@ -1,9 +1,25 @@
+# ===============================
+# Dockerfile: RDP + ngrok + status HTML
+# ===============================
+
 # Gunakan base image Linux
 FROM ubuntu:22.04
 
+# Set build non-interaktif
+ENV DEBIAN_FRONTEND=noninteractive
+ENV LANG=id_ID.UTF-8
+ENV LANGUAGE=id_ID:en
+ENV LC_ALL=id_ID.UTF-8
+
 # Install dependencies
 RUN apt-get update && \
-    apt-get install -y wget unzip xrdp sudo python3 python3-pip && \
+    apt-get install -y wget unzip xrdp sudo python3 python3-pip locales keyboard-configuration && \
+    # Set keyboard layout Indonesia non-interaktif
+    echo "keyboard-configuration keyboard-configuration/layoutcode select id" | debconf-set-selections && \
+    echo "keyboard-configuration keyboard-configuration/layout select Indonesian" | debconf-set-selections && \
+    # Generate locale
+    locale-gen id_ID.UTF-8 && \
+    update-locale LANG=id_ID.UTF-8 && \
     apt-get clean
 
 # Buat user baru untuk RDP
@@ -20,7 +36,7 @@ RUN wget https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-v3-stable-linux-amd64.tgz -O
     mv ngrok /usr/local/bin/ && \
     rm ngrok.tgz
 
-# Set environment variable untuk ngrok authtoken
+# Set environment variable untuk ngrok authtoke
 ENV NGROK_AUTH_TOKEN=2ubrky4Md4p0uDATQAURfYRxrzD_44pso4SGhy6q8BfCGvVPF
 
 # Buat folder status HTML
