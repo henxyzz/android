@@ -1,26 +1,28 @@
 FROM ubuntu:22.04
-
 ENV DEBIAN_FRONTEND=noninteractive
 
 RUN apt-get update && apt-get install -y \
     xfce4 xfce4-goodies \
-    xrdp \
+    x11vnc xvfb \
     novnc websockify \
-    git curl wget sudo \
+    wget curl nano sudo \
     && apt-get clean
 
-# Fix: X wrapper allow anyone
-RUN sed -i 's/console/anybody/g' /etc/X11/Xwrapper.config
+# buat password vnc default (kosong / no pass)
+RUN x11vnc -storepasswd "" /etc/x11vnc.pass
 
-# Prepare noVNC folder
+# buat folder noVNC
 RUN mkdir -p /opt/novnc \
  && cp -r /usr/share/novnc/* /opt/novnc/ \
  && cp -r /usr/share/novnc/utils/* /opt/novnc/utils/
 
 EXPOSE 8080
 
-# Auto clear console + start VNC + noVNC
-CMD clear && \
-    /usr/sbin/xrdp-sesman && \
-    /usr/sbin/xrdp && \
-    websockify --web=/opt/novnc 8080 localhost:5901
+CMD \
+  rm -f /tmp/.X1-lock /tmp/.X11-unix/X1 ; \
+  export DISPLAY=:1 ; \
+  Xvfb :1 -screen 0 1280x720x24 & \
+  sleep 1 && \
+  startxfce4 & \
+  x11vnc -display :1 -nopw -forever -shared -rfbport 5901 & \
+  websockify --web=/opt/novnc 8080 localhost:5901
