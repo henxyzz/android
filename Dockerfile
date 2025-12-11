@@ -1,10 +1,8 @@
 FROM ubuntu:22.04
 ENV DEBIAN_FRONTEND=noninteractive
 
-# Install dependencies
 RUN apt update && apt install -y \
     qemu-system-x86 \
-    qemu-kvm \
     ovmf \
     novnc \
     python3 python3-pip \
@@ -12,13 +10,16 @@ RUN apt update && apt install -y \
     supervisor wget curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Install websockify via pip (FIX)
-RUN pip3 install websockify
+# Install websockify
+RUN sudo pip3 install websockify
 
-# noVNC
+# Setup noVNC
 RUN mkdir -p /opt/novnc && \
     wget -qO- https://github.com/novnc/noVNC/archive/refs/heads/master.tar.gz \
-    | tar xz --strip 1 -C /opt/novnc
+        | tar xz --strip 1 -C /opt/novnc
+
+# Dummy disk supaya QEMU selalu hidup
+RUN mkdir -p /os && qemu-img create -f qcow2 /os/dummy.qcow2 1G
 
 # Supervisor
 RUN mkdir -p /etc/supervisor/conf.d && \
@@ -27,16 +28,18 @@ cat << 'EOF' > /etc/supervisor/conf.d/supervisord.conf
 nodaemon=true
 
 [program:qemu]
-command=qemu-system-x86_64 -enable-kvm -m 2048 -smp 2 \
-    -drive file=/os/windows.qcow2,format=qcow2,if=virtio \
-    -vga qxl \
+command=qemu-system-x86_64 \
+    -m 1024 -smp 2 \
+    -drive file=/os/dummy.qcow2,format=qcow2 \
+    -vga std \
+    -bios /usr/share/OVMF/OVMF_CODE.fd \
     -display vnc=:0 \
     -net nic -net user
 autostart=true
 autorestart=true
 
 [program:websockify]
-command=/usr/local/bin/websockify 8080 localhost:5900 --web=/opt/novnc/
+command=websockify 8080 localhost:5900 --web=/opt/novnc/
 autostart=true
 autorestart=true
 EOF
