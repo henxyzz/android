@@ -12,8 +12,7 @@ RUN apt update && apt install -y \
 WORKDIR /opt/android-cloud
 
 # Download Android-x86 ISO
-wget -O android.iso "https://www.fosshub.com/Android-x86.html?dwl=android-x86_64-9.0-r2.iso"
-
+RUN wget --trust-server-names -O android.iso "https://downloads.sourceforge.net/project/android-x86/Release%209.0/android-x86_64-9.0-r2.iso?viasf=1"
 # Create 8GB disk
 RUN qemu-img create -f qcow2 android-disk.qcow2 8G
 
