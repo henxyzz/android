@@ -11,7 +11,7 @@ RUN apt update && apt install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Install websockify
-RUN sudo pip3 install websockify
+RUN pip3 install websockify
 
 # Setup noVNC
 RUN mkdir -p /opt/novnc && \
