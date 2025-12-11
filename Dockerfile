@@ -14,21 +14,19 @@ RUN apt update && apt install -y \
 # Folder OS
 RUN mkdir -p /os/
 
-# Install noVNC (clean)
+# Install noVNC
 RUN mkdir -p /opt/novnc && \
     wget -qO- https://github.com/novnc/noVNC/archive/refs/heads/master.tar.gz \
     | tar xz --strip 1 -C /opt/novnc
 
-# Supervisor
+# Supervisor config using EOF (fix error)
 RUN mkdir -p /etc/supervisor/conf.d && \
-echo "[supervisord]
+cat << 'EOF' > /etc/supervisor/conf.d/supervisord.conf
+[supervisord]
 nodaemon=true
 
 [program:qemu]
-command=qemu-system-x86_64 \
-    -enable-kvm \
-    -m 4096 \
-    -smp 4 \
+command=qemu-system-x86_64 -enable-kvm -m 4096 -smp 4 \
     -drive if=pflash,format=raw,readonly=on,file=/usr/share/OVMF/OVMF_CODE.fd \
     -drive if=pflash,format=raw,file=/usr/share/OVMF/OVMF_VARS.fd \
     -drive file=/os/windows.qcow2,format=qcow2,if=virtio \
@@ -42,7 +40,8 @@ autorestart=true
 command=websockify 8080 localhost:5900 --web=/opt/novnc/
 autostart=true
 autorestart=true
-" > /etc/supervisor/conf.d/supervisord.conf
+EOF
 
 EXPOSE 8080
+
 CMD ["/usr/bin/supervisord"]
