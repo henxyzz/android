@@ -1,40 +1,48 @@
 FROM ubuntu:22.04
-
 ENV DEBIAN_FRONTEND=noninteractive
 
 # Install dependencies
 RUN apt update && apt install -y \
-    qemu-kvm qemu-system-x86 \
+    qemu-system-x86 \
+    qemu-kvm \
+    ovmf \
     novnc websockify \
-    x11vnc xvfb \
-    wget curl \
-    net-tools \
-    supervisor \
+    tigervnc-standalone-server \
+    supervisor wget curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Download Android-x86 ISO (Android 9.0-r2)
-RUN mkdir -p /android && \
-    wget -O /android/android.iso \
-    "https://downloads.sourceforge.net/project/android-x86/Release%209.0/android-x86_64-9.0-r2.iso"
+# Folder OS
+RUN mkdir -p /os/
 
-# Create supervisor config directly from Dockerfile
+# Install noVNC (clean)
+RUN mkdir -p /opt/novnc && \
+    wget -qO- https://github.com/novnc/noVNC/archive/refs/heads/master.tar.gz \
+    | tar xz --strip 1 -C /opt/novnc
+
+# Supervisor
 RUN mkdir -p /etc/supervisor/conf.d && \
-    echo "[supervisord]\n\
-nodaemon=true\n\
-\n\
-[program:qemu]\n\
-command=qemu-system-x86_64 -enable-kvm -m 4096 -smp 4 -cdrom /android/android.iso -boot d -vga virtio -display vnc=:1 -device virtio-mouse-pci -device virtio-keyboard-pci -nic user,model=virtio-net-pci\n\
-autostart=true\n\
-autorestart=true\n\
-\n\
-[program:websockify]\n\
-command=websockify 8080 localhost:5901 --web=/usr/share/novnc/\n\
-autostart=true\n\
-autorestart=true" \
-    > /etc/supervisor/conf.d/supervisord.conf
+echo "[supervisord]
+nodaemon=true
 
-# Expose NoVNC port
+[program:qemu]
+command=qemu-system-x86_64 \
+    -enable-kvm \
+    -m 4096 \
+    -smp 4 \
+    -drive if=pflash,format=raw,readonly=on,file=/usr/share/OVMF/OVMF_CODE.fd \
+    -drive if=pflash,format=raw,file=/usr/share/OVMF/OVMF_VARS.fd \
+    -drive file=/os/windows.qcow2,format=qcow2,if=virtio \
+    -vga qxl \
+    -display vnc=:0 \
+    -net nic,model=virtio -net user
+autostart=true
+autorestart=true
+
+[program:websockify]
+command=websockify 8080 localhost:5900 --web=/opt/novnc/
+autostart=true
+autorestart=true
+" > /etc/supervisor/conf.d/supervisord.conf
+
 EXPOSE 8080
-
-# Run supervisor
 CMD ["/usr/bin/supervisord"]
