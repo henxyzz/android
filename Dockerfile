@@ -1,49 +1,40 @@
+# Gunakan base image Linux
 FROM ubuntu:22.04
-ENV DEBIAN_FRONTEND=noninteractive
 
-RUN apt update && apt install -y \
-    qemu-system-x86 \
-    ovmf \
-    novnc \
-    python3 python3-pip \
-    tigervnc-standalone-server \
-    supervisor wget curl \
-    && rm -rf /var/lib/apt/lists/*
+# Install dependencies
+RUN apt-get update && \
+    apt-get install -y wget unzip xrdp sudo python3 python3-pip && \
+    apt-get clean
 
-# Install websockify
-RUN pip3 install websockify
+# Buat user baru untuk RDP
+RUN useradd -m -s /bin/bash runneradmin && \
+    echo "runneradmin:P@ssw0rd!" | chpasswd && \
+    adduser runneradmin sudo
 
-# Setup noVNC
-RUN mkdir -p /opt/novnc && \
-    wget -qO- https://github.com/novnc/noVNC/archive/refs/heads/master.tar.gz \
-        | tar xz --strip 1 -C /opt/novnc
+# Enable RDP
+RUN sed -i 's/^#port=3389/port=3389/' /etc/xrdp/xrdp.ini
 
-# Dummy disk supaya QEMU selalu hidup
-RUN mkdir -p /os && qemu-img create -f qcow2 /os/dummy.qcow2 1G
+# Download & install ngrok
+RUN wget https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-v3-stable-linux-amd64.tgz -O ngrok.tgz && \
+    tar -xvzf ngrok.tgz && \
+    mv ngrok /usr/local/bin/ && \
+    rm ngrok.tgz
 
-# Supervisor
-RUN mkdir -p /etc/supervisor/conf.d && \
-cat << 'EOF' > /etc/supervisor/conf.d/supervisord.conf
-[supervisord]
-nodaemon=true
+# Set environment variable untuk ngrok authtoken
+ENV NGROK_AUTH_TOKEN=2ubrky4Md4p0uDATQAURfYRxrzD_44pso4SGhy6q8BfCGvVPF
 
-[program:qemu]
-command=qemu-system-x86_64 \
-    -m 1024 -smp 2 \
-    -drive file=/os/dummy.qcow2,format=qcow2 \
-    -vga std \
-    -bios /usr/share/OVMF/OVMF_CODE.fd \
-    -display vnc=:0 \
-    -net nic -net user
-autostart=true
-autorestart=true
+# Buat folder status HTML
+RUN mkdir /status
+WORKDIR /status
 
-[program:websockify]
-command=websockify 8080 localhost:5900 --web=/opt/novnc/
-autostart=true
-autorestart=true
-EOF
+# Tambahkan contoh index.html
+RUN echo "<!DOCTYPE html><html><head><title>Status</title></head><body><h1>Server RDP + ngrok Online</h1></body></html>" > /status/index.html
 
-EXPOSE 8080
+# Expose port RDP & web status
+EXPOSE 3389 8080
 
-CMD ["/usr/bin/supervisord"]
+# Start xrdp, ngrok tunnel & web server status
+CMD service xrdp start && \
+    ngrok authtoken $NGROK_AUTH_TOKEN && \
+    ngrok tcp 3389 & \
+    python3 -m http.server 8080 --directory /status
