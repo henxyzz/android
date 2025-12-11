@@ -9,17 +9,18 @@ RUN apt-get update && apt-get install -y \
     git curl wget sudo \
     && apt-get clean
 
-# Enable XRDP
+# Fix: X wrapper allow anyone
 RUN sed -i 's/console/anybody/g' /etc/X11/Xwrapper.config
-RUN systemctl enable xrdp
 
-# Setup noVNC
-RUN mkdir -p /opt/novnc && \
-    cp -r /usr/share/novnc/* /opt/novnc/ && \
-    cp -r /usr/share/novnc/utils/websockify /opt/novnc/
+# Prepare noVNC folder
+RUN mkdir -p /opt/novnc \
+ && cp -r /usr/share/novnc/* /opt/novnc/ \
+ && cp -r /usr/share/novnc/utils/* /opt/novnc/utils/
 
 EXPOSE 8080
 
-# Start script
-CMD /etc/init.d/xrdp start && \
-    /opt/novnc/utils/launch.sh --vnc localhost:5901 --listen 8080
+# Auto clear console + start VNC + noVNC
+CMD clear && \
+    /usr/sbin/xrdp-sesman && \
+    /usr/sbin/xrdp && \
+    websockify --web=/opt/novnc 8080 localhost:5901
