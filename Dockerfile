@@ -6,38 +6,37 @@ RUN apt update && apt install -y \
     qemu-system-x86 \
     qemu-kvm \
     ovmf \
-    novnc websockify \
+    novnc \
+    python3 python3-pip \
     tigervnc-standalone-server \
     supervisor wget curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Folder OS
-RUN mkdir -p /os/
+# Install websockify via pip (FIX)
+RUN pip3 install websockify
 
-# Install noVNC
+# noVNC
 RUN mkdir -p /opt/novnc && \
     wget -qO- https://github.com/novnc/noVNC/archive/refs/heads/master.tar.gz \
     | tar xz --strip 1 -C /opt/novnc
 
-# Supervisor config using EOF (fix error)
+# Supervisor
 RUN mkdir -p /etc/supervisor/conf.d && \
 cat << 'EOF' > /etc/supervisor/conf.d/supervisord.conf
 [supervisord]
 nodaemon=true
 
 [program:qemu]
-command=qemu-system-x86_64 -enable-kvm -m 4096 -smp 4 \
-    -drive if=pflash,format=raw,readonly=on,file=/usr/share/OVMF/OVMF_CODE.fd \
-    -drive if=pflash,format=raw,file=/usr/share/OVMF/OVMF_VARS.fd \
+command=qemu-system-x86_64 -enable-kvm -m 2048 -smp 2 \
     -drive file=/os/windows.qcow2,format=qcow2,if=virtio \
     -vga qxl \
     -display vnc=:0 \
-    -net nic,model=virtio -net user
+    -net nic -net user
 autostart=true
 autorestart=true
 
 [program:websockify]
-command=websockify 8080 localhost:5900 --web=/opt/novnc/
+command=/usr/local/bin/websockify 8080 localhost:5900 --web=/opt/novnc/
 autostart=true
 autorestart=true
 EOF
