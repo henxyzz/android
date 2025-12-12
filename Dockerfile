@@ -1,26 +1,27 @@
-FROM ubuntu:22.04
+FROM node:18-bullseye
 
-# Update dan install SSH + Nginx
-RUN apt-get update && apt-get install -y \
-    openssh-server \
-    nginx \
-    && mkdir /var/run/sshd
+# Update & install SSH server
+RUN apt-get update && \
+    apt-get install -y openssh-server && \
+    mkdir /var/run/sshd
 
-# Buat user SSH
+# Set user & password
 RUN useradd -m admin && echo "admin:admin123" | chpasswd
 
-# Enable password login
-RUN sed -i 's/PasswordAuthentication no/PasswordAuthentication yes/' /etc/ssh/sshd_config
+# Allow password auth
+RUN sed -i 's/#PasswordAuthentication yes/PasswordAuthentication yes/' /etc/ssh/sshd_config && \
+    sed -i 's/PasswordAuthentication no/PasswordAuthentication yes/' /etc/ssh/sshd_config
 
-# Konfigurasi reverse proxy SIMPLE (tanpa proxy_protocol)
-RUN rm /etc/nginx/sites-enabled/default
-RUN echo 'server { \
-    listen 8080; \
-    location / { \
-        proxy_pass http://127.0.0.1:22; \
-    } \
-}' > /etc/nginx/sites-enabled/ssh-proxy.conf
+# Install webssh2
+RUN git clone https://github.com/billchurch/WebSSH2.git /app
+WORKDIR /app
+RUN npm install
 
-EXPOSE 8080
+# Config WebSSH2 to connect LOCAL SSH
+COPY config.json /app/config/
 
-CMD service ssh start && nginx -g "daemon off;"
+# EXPOSE clevercloud port
+ENV PORT=8080
+
+CMD service ssh start && \
+    npm start
