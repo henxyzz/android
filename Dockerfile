@@ -1,70 +1,58 @@
 FROM ubuntu:22.04
 
 ENV DEBIAN_FRONTEND=noninteractive
-ENV DISPLAY=:0
-ENV PORT=8080
 
-RUN apt-get update && apt-get install -y \
-    wget curl git \
+RUN apt update && apt install -y \
     tigervnc-standalone-server \
-    supervisor \
     xfce4 \
-    xz-utils \
-    xserver-xorg-video-dummy \
-    xserver-xorg-core \
-    xserver-xorg-input-all \
-    python3 python3-pip \
-    && rm -rf /var/lib/apt/lists/*
+    novnc \
+    websockify \
+    wget \
+    unzip \
+    supervisor \
+    qemu-system-x86 \
+    xz-utils
 
-# Install websockify terbaru
-RUN pip3 install websockify
+# --- Folder untuk noVNC ---
+RUN mkdir -p /opt/novnc
+RUN cp -r /usr/share/novnc/* /opt/novnc/
 
-# Install noVNC from GitHub (versi stabil)
-RUN git clone https://github.com/novnc/noVNC.git /opt/novnc && \
-    git clone https://github.com/novnc/websockify.git /opt/novnc/utils/websockify
+# Download Android-x86 ISO
+RUN mkdir -p /iso
+RUN wget -O /iso/android.iso "https://downloads.sourceforge.net/project/android-x86/Release%209.0/android-x86_64-9.0-r2.iso"
 
-# VNCPASS
-RUN mkdir -p /root/.vnc && \
-    echo "123456" | vncpasswd -f > /root/.vnc/passwd && \
-    chmod 600 /root/.vnc/passwd
-
-# Xorg dummy
-RUN mkdir -p /etc/X11/xorg.conf.d
-RUN echo 'Section "Device"
-  Identifier "dummy"
-  Driver "dummy"
-EndSection
-Section "Monitor"
-  Identifier "monitor"
-EndSection
-Section "Screen"
-  Identifier "screen"
-  Device "dummy"
-  Monitor "monitor"
-  SubSection "Display"
-    Depth 24
-    Virtual 1280 720
-  EndSubSection
-EndSection' > /etc/X11/xorg.conf.d/10-dummy.conf
-
-# Supervisor config
+# --- Supervisor config ---
 RUN mkdir -p /etc/supervisor/conf.d
-RUN echo "[supervisord]
-nodaemon=true
 
-[program:xorg]
-command=/usr/bin/Xorg :0 -config /etc/X11/xorg.conf.d/10-dummy.conf
-autorestart=true
+# VNC di :1 = port 5901
+RUN mkdir -p /root/.vnc
+RUN echo password | vncpasswd -f > /root/.vnc/passwd
+RUN chmod 600 /root/.vnc/passwd
 
+# Supervisor program untuk VNC
+RUN bash -c 'cat > /etc/supervisor/conf.d/vnc.conf << EOF
 [program:vnc]
-command=/usr/bin/tigervncserver :0 -geometry 1280x720 -localhost no -rfbauth /root/.vnc/passwd
+command=/usr/bin/vncserver :1 -geometry 1280x720 -depth 24
+autostart=true
 autorestart=true
+EOF'
 
+# Supervisor untuk websockify (VNC → WebSocket)
+RUN bash -c 'cat > /etc/supervisor/conf.d/websockify.conf << EOF
 [program:websockify]
-command=/usr/local/bin/websockify --web=/opt/novnc ${PORT} localhost:5900
+command=/usr/bin/websockify --web=/opt/novnc 8080 localhost:5901
+autostart=true
 autorestart=true
+EOF'
 
-" > /etc/supervisor/conf.d/supervisord.conf
+# Supervisor untuk Android-x86 QEMU
+RUN bash -c 'cat > /etc/supervisor/conf.d/android.conf << EOF
+[program:android]
+command=qemu-system-x86_64 -cdrom /iso/android.iso -m 2048 -smp 2 -vnc :1 -enable-kvm
+autostart=true
+autorestart=true
+EOF'
 
 EXPOSE 8080
-CMD bash -c "echo '➡ noVNC running at: https://${CC_WEBROOT_DOMAIN}' && supervisord -n"
+
+CMD ["/usr/bin/supervisord", "-n"]
