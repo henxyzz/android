@@ -1,38 +1,64 @@
 FROM ubuntu:22.04
 
-# Non-interaktif + locale Indonesia
 ENV DEBIAN_FRONTEND=noninteractive
-ENV LANG=id_ID.UTF-8
-ENV LANGUAGE=id_ID:en
-ENV LC_ALL=id_ID.UTF-8
+ENV TZ=Asia/Jakarta
 
-# Install dependencies
-RUN apt-get update && \
-    apt-get install -y wget unzip xrdp sudo python3 python3-pip locales keyboard-configuration openssh-client && \
-    echo "keyboard-configuration keyboard-configuration/layoutcode select id" | debconf-set-selections && \
-    echo "keyboard-configuration keyboard-configuration/layout select Indonesian" | debconf-set-selections && \
-    locale-gen id_ID.UTF-8 && \
-    update-locale LANG=id_ID.UTF-8 && \
-    apt-get clean
+# Update & install dependencies
+RUN apt update && apt install -y \
+    xfce4 \
+    xfce4-goodies \
+    wget \
+    curl \
+    unzip \
+    nano \
+    git \
+    tigervnc-standalone-server \
+    tigervnc-common \
+    supervisor \
+    websockify \
+    xvfb \
+    x11-apps \
+    libglu1-mesa \
+    libpulse0 \
+    libnss3 \
+    libxss1 \
+    openjdk-11-jdk
 
-# Buat user baru untuk RDP
-RUN useradd -m -s /bin/bash runneradmin && \
-    echo "runneradmin:P@ssw0rd!" | chpasswd && \
-    adduser runneradmin sudo
+# Install noVNC
+RUN git clone https://github.com/novnc/noVNC /opt/noVNC \
+    && git clone https://github.com/novnc/websockify /opt/noVNC/utils/websockify \
+    && ln -s /opt/noVNC/vnc.html /opt/noVNC/index.html
 
-# Enable RDP
-RUN sed -i 's/^#port=3389/port=3389/' /etc/xrdp/xrdp.ini
+# Install Android SDK
+RUN mkdir -p /opt/android/cmdline-tools && \
+    cd /opt/android/cmdline-tools && \
+    wget https://dl.google.com/android/repository/commandlinetools-linux-9477386_latest.zip && \
+    unzip commandlinetools-linux-9477386_latest.zip && \
+    mv cmdline-tools tools
 
-# Folder status HTML
-RUN mkdir /status
-WORKDIR /status
-RUN echo "<!DOCTYPE html><html><head><title>Status</title></head><body><h1>Server RDP Online</h1></body></html>" > /status/index.html
+ENV ANDROID_HOME=/opt/android
+ENV PATH=$PATH:/opt/android/cmdline-tools/tools/bin:/opt/android/platform-tools:/opt/android/emulator
 
-# Expose port lokal RDP & status (tidak publik)
-EXPOSE 3389 8080
+# Accept licenses
+RUN yes | sdkmanager --licenses
 
-# Script start: RDP, web status, SSH reverse tunnel
-CMD service xrdp start && \
-    python3 -m http.server 8080 --directory /status & \
-    # SSH reverse tunnel (ganti user@vps_ip dan port publik)
-    ssh -o StrictHostKeyChecking=no -N -R 50000:localhost:3389 -R 5080:localhost:8080 user@vps_ip
+# Install Android tools + system image
+RUN sdkmanager "platform-tools" \
+    "platforms;android-33" \
+    "build-tools;33.0.2" \
+    "system-images;android-33;google_apis_playstore;x86_64"
+
+# Create AVD
+RUN echo "no" | avdmanager create avd \
+    --name devAvd \
+    --package "system-images;android-33;google_apis_playstore;x86_64" \
+    --device "pixel"
+
+# Supervisor config (start VNC + noVNC + emulator)
+RUN mkdir -p /etc/supervisor/conf.d
+COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
+
+EXPOSE 5901
+EXPOSE 8080
+
+CMD ["/usr/bin/supervisord"]
