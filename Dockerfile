@@ -10,10 +10,10 @@ RUN apt-get update && apt-get install -y \
     websockify \
     xfce4 \
     xserver-xorg-video-dummy \
-    xserver-xorg-input-void \
+    xserver-xorg-input-all \
     xserver-xorg-core \
     supervisor \
-    && rm -rf /var/lib/apt/lists/*
+ && rm -rf /var/lib/apt/lists/*
 
 # Download Android-x86 image
 RUN mkdir -p /opt/android
