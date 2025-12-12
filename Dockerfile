@@ -5,23 +5,30 @@ ENV DISPLAY=:0
 ENV PORT=8080
 
 RUN apt-get update && apt-get install -y \
-    wget unzip xz-utils \
+    wget curl git \
     tigervnc-standalone-server \
-    websockify \
     supervisor \
     xfce4 \
-    novnc \
+    xz-utils \
     xserver-xorg-video-dummy \
     xserver-xorg-core \
     xserver-xorg-input-all \
+    python3 python3-pip \
     && rm -rf /var/lib/apt/lists/*
 
-# Create VNC password
+# Install websockify terbaru
+RUN pip3 install websockify
+
+# Install noVNC from GitHub (versi stabil)
+RUN git clone https://github.com/novnc/noVNC.git /opt/novnc && \
+    git clone https://github.com/novnc/websockify.git /opt/novnc/utils/websockify
+
+# VNCPASS
 RUN mkdir -p /root/.vnc && \
     echo "123456" | vncpasswd -f > /root/.vnc/passwd && \
     chmod 600 /root/.vnc/passwd
 
-# Xorg dummy config
+# Xorg dummy
 RUN mkdir -p /etc/X11/xorg.conf.d
 RUN echo 'Section "Device"
   Identifier "dummy"
@@ -29,8 +36,6 @@ RUN echo 'Section "Device"
 EndSection
 Section "Monitor"
   Identifier "monitor"
-  HorizSync 30-80
-  VertRefresh 50-75
 EndSection
 Section "Screen"
   Identifier "screen"
@@ -56,15 +61,10 @@ command=/usr/bin/tigervncserver :0 -geometry 1280x720 -localhost no -rfbauth /ro
 autorestart=true
 
 [program:websockify]
-command=/usr/bin/websockify --web=/usr/share/novnc/ ${PORT} localhost:5900
+command=/usr/local/bin/websockify --web=/opt/novnc ${PORT} localhost:5900
 autorestart=true
 
-[program:healthcheck]
-command=/bin/bash -c \"echo 'Open ports:' && ss -tulpn\"
-startsecs=3
-autorestart=false
 " > /etc/supervisor/conf.d/supervisord.conf
 
 EXPOSE 8080
-
-CMD bash -c "echo '➡ CleverCloud Android VNC running at: https://${CC_WEBROOT_DOMAIN}/' && supervisord -n"
+CMD bash -c "echo '➡ noVNC running at: https://${CC_WEBROOT_DOMAIN}' && supervisord -n"
