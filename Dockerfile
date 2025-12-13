@@ -2,26 +2,31 @@ FROM ubuntu:22.04
 
 ENV DEBIAN_FRONTEND=noninteractive
 
-# Update & install kebutuhan
+# Update + basic tools
 RUN apt-get update && apt-get install -y \
-    openssh-server \
-    sudo \
     curl \
     git \
-    nodejs \
-    npm \
+    openssh-server \
+    sudo \
  && mkdir /var/run/sshd
+
+# Install Node.js 22 (INI KUNCI NYA)
+RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && \
+    apt-get install -y nodejs
+
+# Cek versi (buat mental health)
+RUN node -v && npm -v
 
 # Set ROOT password
 RUN echo "root:root123" | chpasswd
 
-# User admin (opsional, tapi enak buat backup)
+# Optional admin user
 RUN useradd -m admin && \
     echo "admin:admin123" | chpasswd && \
     usermod -aG sudo admin && \
     echo "admin ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
 
-# Enable root + password login
+# Enable root SSH login
 RUN sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config && \
     sed -i 's/#PasswordAuthentication yes/PasswordAuthentication yes/' /etc/ssh/sshd_config && \
     sed -i 's/PasswordAuthentication no/PasswordAuthentication yes/' /etc/ssh/sshd_config && \
@@ -38,5 +43,4 @@ COPY config.json /app/config/
 # Clever Cloud port
 ENV PORT=8080
 
-# Start SSH + WebSSH2
 CMD service ssh start && npm start
