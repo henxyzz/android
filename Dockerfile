@@ -3,9 +3,10 @@ FROM ubuntu:22.04
 ENV DEBIAN_FRONTEND=noninteractive
 ENV USER=android
 ENV HOME=/home/android
+ENV PORT=8080
 
 # ===============================
-# Install deps (ROOT)
+# Install dependencies
 # ===============================
 RUN apt update && apt install -y \
   xfce4 xfce4-goodies \
@@ -22,14 +23,11 @@ RUN apt update && apt install -y \
 RUN useradd -m android && \
     echo "android ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
 
-# ===============================
-# Prepare workspace (ROOT)
-# ===============================
 WORKDIR /home/android
 RUN chown -R android:android /home/android
 
 # ===============================
-# Download Android-x86 (ROOT)
+# Download Android-x86 (root)
 # ===============================
 RUN wget -O /home/android/android.iso \
   https://sourceforge.net/projects/android-x86/files/Release%209.0/android-x86_64-9.0-r2.iso/download
@@ -44,22 +42,25 @@ USER android
 WORKDIR /home/android
 
 # ===============================
-# Startup script
+# Start script
 # ===============================
 RUN cat << 'EOF' > start.sh
 #!/bin/bash
 set -e
+
 export DISPLAY=:0
 
-echo "[+] Starting Xvfb"
+echo "[+] FORCED PORT 8080"
+
+# Virtual display
 Xvfb :0 -screen 0 1280x720x24 &
-sleep 2
+sleep 1
 
-echo "[+] Starting XFCE"
+# Desktop
 startxfce4 &
-sleep 5
+sleep 3
 
-echo "[+] Starting QEMU Android"
+# Android (QEMU → VNC :1 / 5901)
 qemu-system-x86_64 \
   -m 2048 \
   -smp 2 \
@@ -70,16 +71,18 @@ qemu-system-x86_64 \
   -net nic -net user \
   -display none \
   -vnc :1 &
-sleep 5
+sleep 3
 
-echo "[+] Starting x11vnc"
+# Bridge display
 x11vnc -display :0 -forever -nopw -rfbport 5901 &
-sleep 2
+sleep 1
 
-echo "[+] Starting noVNC on 8080"
-exec websockify --web=/usr/share/novnc/ 8080 localhost:5901
+echo "[+] Listening on 0.0.0.0:8080"
+exec websockify --web=/usr/share/novnc/ 0.0.0.0:8080 localhost:5901
 EOF
 
 RUN chmod +x start.sh
+
+EXPOSE 8080
 
 CMD ["bash", "start.sh"]
