@@ -51,9 +51,15 @@ RUN cat << 'EOF' > start.sh
 set -e
 export DISPLAY=:0
 
+echo "[+] Starting Xvfb"
 Xvfb :0 -screen 0 1280x720x24 &
-startxfce4 &
+sleep 2
 
+echo "[+] Starting XFCE"
+startxfce4 &
+sleep 5
+
+echo "[+] Starting QEMU Android"
 qemu-system-x86_64 \
   -m 2048 \
   -smp 2 \
@@ -64,9 +70,14 @@ qemu-system-x86_64 \
   -net nic -net user \
   -display none \
   -vnc :1 &
+sleep 5
 
+echo "[+] Starting x11vnc"
 x11vnc -display :0 -forever -nopw -rfbport 5901 &
-websockify --web=/usr/share/novnc/ 8080 localhost:5901
+sleep 2
+
+echo "[+] Starting noVNC on 8080"
+exec websockify --web=/usr/share/novnc/ 8080 localhost:5901
 EOF
 
 RUN chmod +x start.sh
