@@ -3,10 +3,9 @@ FROM ubuntu:22.04
 ENV DEBIAN_FRONTEND=noninteractive
 ENV USER=android
 ENV HOME=/home/android
-WORKDIR /home/android
 
 # ===============================
-# Install deps
+# Install deps (ROOT)
 # ===============================
 RUN apt update && apt install -y \
   xfce4 xfce4-goodies \
@@ -18,18 +17,31 @@ RUN apt update && apt install -y \
   && apt clean
 
 # ===============================
-# User
+# Create user
 # ===============================
-RUN useradd -m android && echo "android ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
+RUN useradd -m android && \
+    echo "android ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
+
+# ===============================
+# Prepare workspace (ROOT)
+# ===============================
+WORKDIR /home/android
+RUN chown -R android:android /home/android
+
+# ===============================
+# Download Android-x86 (ROOT)
+# ===============================
+RUN wget -O /home/android/android.iso \
+  https://sourceforge.net/projects/android-x86/files/Release%209.0/android-x86_64-9.0-r2.iso/download
+
+RUN qemu-img create -f qcow2 /home/android/android.img 8G
+RUN chown android:android /home/android/android.*
+
+# ===============================
+# Switch user
+# ===============================
 USER android
-
-# ===============================
-# Download Android-x86
-# ===============================
-RUN wget -O android.iso https://sourceforge.net/projects/android-x86/files/Release%209.0/android-x86_64-9.0-r2.iso/download
-
-# Create disk
-RUN qemu-img create -f qcow2 android.img 8G
+WORKDIR /home/android
 
 # ===============================
 # Startup script
@@ -37,16 +49,11 @@ RUN qemu-img create -f qcow2 android.img 8G
 RUN cat << 'EOF' > start.sh
 #!/bin/bash
 set -e
-
 export DISPLAY=:0
 
-# Virtual display
 Xvfb :0 -screen 0 1280x720x24 &
-
-# Desktop
 startxfce4 &
 
-# Android via QEMU (VNC on :1 -> port 5901)
 qemu-system-x86_64 \
   -m 2048 \
   -smp 2 \
@@ -58,10 +65,7 @@ qemu-system-x86_64 \
   -display none \
   -vnc :1 &
 
-# VNC bridge
 x11vnc -display :0 -forever -nopw -rfbport 5901 &
-
-# noVNC (Clever Cloud port)
 websockify --web=/usr/share/novnc/ 8080 localhost:5901
 EOF
 
