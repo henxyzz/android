@@ -1,27 +1,41 @@
 FROM ubuntu:22.04
 
 ENV DEBIAN_FRONTEND=noninteractive
-ENV DISPLAY=:1
 
+# Install desktop + vnc + qemu
 RUN apt update && apt install -y \
-    xfce4 xfce4-goodies \
-    x11vnc xvfb \
-    novnc websockify \
-    dbus-x11 \
-    net-tools nano && \
-    apt clean
+  xfce4 xfce4-goodies \
+  tightvncserver \
+  novnc websockify \
+  wget curl sudo \
+  qemu-system-x86 \
+  openjdk-11-jdk \
+  && apt clean
 
-# Password VNC
-RUN mkdir -p /root/.vnc && \
-    x11vnc -storepasswd 1234 /root/.vnc/passwd
+# User
+RUN useradd -m android && echo "android:android" | chpasswd && adduser android sudo
+USER android
+WORKDIR /home/android
 
-# Startup script
-RUN echo '#!/bin/bash\n\
-Xvfb :1 -screen 0 1024x768x16 &\n\
-sleep 2\n\
-startxfce4 &\n\
-x11vnc -display :1 -rfbauth /root/.vnc/passwd -forever -shared &\n\
-websockify --web=/usr/share/novnc/ --wrap-mode=ignore 8080 localhost:5900\n\
-' > /start.sh && chmod +x /start.sh
+# Download Android-x86 ISO
+RUN wget -O android.iso https://sourceforge.net/projects/android-x86/files/Release%209.0/android-x86_64-9.0-r2.iso/download
 
-CMD ["/start.sh"]
+# Create virtual disk
+RUN qemu-img create -f qcow2 android.img 8G
+
+# VNC setup
+RUN mkdir ~/.vnc && echo "android" | vncpasswd -f > ~/.vnc/passwd && chmod 600 ~/.vnc/passwd
+
+# Startup
+CMD vncserver :0 -geometry 1280x720 -depth 24 && \
+    qemu-system-x86_64 \
+      -m 2048 \
+      -smp 2 \
+      -hda android.img \
+      -cdrom android.iso \
+      -boot d \
+      -vga std \
+      -net nic -net user \
+      -display none \
+      -vnc :1 & \
+    websockify --web=/usr/share/novnc/ 8080 localhost:5901
