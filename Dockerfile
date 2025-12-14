@@ -1,46 +1,27 @@
 FROM ubuntu:22.04
 
 ENV DEBIAN_FRONTEND=noninteractive
+ENV DISPLAY=:1
 
-# Update + basic tools
-RUN apt-get update && apt-get install -y \
-    curl \
-    git \
-    openssh-server \
-    sudo \
- && mkdir /var/run/sshd
+RUN apt update && apt install -y \
+    xfce4 xfce4-goodies \
+    x11vnc xvfb \
+    novnc websockify \
+    dbus-x11 \
+    net-tools nano && \
+    apt clean
 
-# Install Node.js 22 (INI KUNCI NYA)
-RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && \
-    apt-get install -y nodejs
+# Password VNC
+RUN mkdir -p /root/.vnc && \
+    x11vnc -storepasswd 1234 /root/.vnc/passwd
 
-# Cek versi (buat mental health)
-RUN node -v && npm -v
+# Startup script
+RUN echo '#!/bin/bash\n\
+Xvfb :1 -screen 0 1024x768x16 &\n\
+sleep 2\n\
+startxfce4 &\n\
+x11vnc -display :1 -rfbauth /root/.vnc/passwd -forever -shared &\n\
+websockify --web=/usr/share/novnc/ --wrap-mode=ignore 8080 localhost:5900\n\
+' > /start.sh && chmod +x /start.sh
 
-# Set ROOT password
-RUN echo "root:root123" | chpasswd
-
-# Optional admin user
-RUN useradd -m admin && \
-    echo "admin:admin123" | chpasswd && \
-    usermod -aG sudo admin && \
-    echo "admin ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
-
-# Enable root SSH login
-RUN sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config && \
-    sed -i 's/#PasswordAuthentication yes/PasswordAuthentication yes/' /etc/ssh/sshd_config && \
-    sed -i 's/PasswordAuthentication no/PasswordAuthentication yes/' /etc/ssh/sshd_config && \
-    echo "UsePAM no" >> /etc/ssh/sshd_config
-
-# Install WebSSH2
-RUN git clone https://github.com/billchurch/WebSSH2.git /app
-WORKDIR /app
-RUN npm install
-
-# Config WebSSH2
-COPY config.json /app/config/
-
-# Clever Cloud port
-ENV PORT=8080
-
-CMD service ssh start && npm start
+CMD ["/start.sh"]
